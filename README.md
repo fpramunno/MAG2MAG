@@ -1,3 +1,3 @@
 # MAG2MAG
 
-The library is under construction
+The repository is under construction
