@@ -8,6 +8,8 @@ This repository contains the code for training the Mag2Mag paper. The paper intr
 - `training.py`: The main script for training the model.
 - `diffusion.py`: Contains the DDPM class and utility functions.
 - `modules.py`: Includes essential modules and classes used in the model.
+- 'physics_param.py': Script to compute the physics metrics.
+- 'util.py': Includes all the utility functions for the physics metrics computations.
 
 ## Examples
 ![](https://github.com/fpramunno/MAG2MAG/blob/main/pred.png)
