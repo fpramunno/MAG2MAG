@@ -224,11 +224,11 @@ class PairedJP2Dataset(Dataset):
         return data2, data3, label, time_mag
 
 # Example usage:
-dir2 = '/mnt/nas05/data01/francesco/sdo_data/final_dataset/mag_24_jp2_1024/'
+dir2 = 'Directory for the LoS magnetogram 24 hours before the flare peak'
 
-dir3 = '/mnt/nas05/data01/francesco/sdo_data/final_dataset/mag_flare_jp2_1024/'
+dir3 = 'Directory for the LoS magnetogram at the flare peak'
 
-df_lab = pd.read_csv("/mnt/nas05/data01/francesco/sdo_data/final_dataset/df_all_final_v2.csv")
+df_lab = pd.read_csv('Dataframe with the flaring information')
 
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
@@ -241,7 +241,7 @@ class CustomRotation:
         return TF.rotate(img, self.angle)
 
 transform_hmi = transforms.Compose([
-    transforms.Resize((512, 512)),
+    transforms.Resize((256, 256)),
     transforms.RandomVerticalFlip(p=1.0),  # This line adds a 90-degree rotation to the right
     transforms.Normalize(mean=(0.5), std=(0.5))
 ])
@@ -287,7 +287,7 @@ args = parser.parse_args()
 args.run_name = "DDPM_Conditional"
 args.epochs = 500
 args.batch_size = 2
-args.image_size = 512
+args.image_size = 256
 args.device = "cuda"
 args.lr = 3e-4
 
@@ -308,17 +308,17 @@ def setup_logging(run_name):
     Setting up the folders for saving the model and the results
 
     """
-    os.makedirs("models_512_DDPM_v2", exist_ok=True)
-    os.makedirs("results_512_DDPM_v2", exist_ok=True)
-    os.makedirs(os.path.join("models_512_DDPM_v2", run_name), exist_ok=True)
-    os.makedirs(os.path.join("results_512_DDPM_v2", run_name), exist_ok=True)
+    os.makedirs("models_256_DDPM_v2", exist_ok=True)
+    os.makedirs("results_256_DDPM_v2", exist_ok=True)
+    os.makedirs(os.path.join("models_256_DDPM_v2", run_name), exist_ok=True)
+    os.makedirs(os.path.join("results_256_DDPM_v2", run_name), exist_ok=True)
 
 
 setup_logging(args.run_name)
 device = args.device
 dataloader = train_data
 dataloader_val = val_data
-model = PaletteModelV2(c_in=2, c_out=1, num_classes=5,  image_size=int(64), true_img_size=64).to(device)
+model = PaletteModelV2(c_in=2, c_out=1, num_classes=5,  image_size=int(256), true_img_size=64).to(device)
 # ckpt = torch.load("./models_cloud_removal_1024_newnorm_CaII/DDPM_Conditional/ema_ckpt_cond.pt")
 # model.load_state_dict(ckpt)
 
@@ -334,7 +334,7 @@ wandb.init(project="sdo_img2img", entity="francescopio")
 
 wandb.config = {"# Epochs" : 500,
                 "Batch size" : 2,
-                "Image size" : 512,
+                "Image size" : 256,
                 "Device" : "cuda",
                 "Lr" : 3e-4}
 
@@ -364,16 +364,6 @@ for epoch in range(args.epochs):
         
         label = label
         time = time
-        has_nan_24 = torch.isnan(img_24).any()
-        has_nan_peak = torch.isnan(img_peak).any()
-        
-        if (has_nan_24.item() or has_nan_peak.item()) is True:
-            print('The batch number is: {}'.format(i))
-            del img_24
-            del img_peak
-            torch.cuda.empty_cache()
-            gc.collect()
-            continue
         
         labels = None
         t = diffusion.sample_timesteps(img_peak.shape[0]).to(device)
@@ -386,42 +376,17 @@ for epoch in range(args.epochs):
         
         optimizer.zero_grad()
         
-        if np.isnan(loss.item()):
-            print('The batch number is: {}'.format(i))
-            del img_24
-            del img_peak
-            del predicted_noise
-            torch.cuda.empty_cache()
-            gc.collect()
-            continue
-        else:
-            peak_allocated = torch.cuda.max_memory_allocated(device=device)
-            # print(f"Peak Allocated Memory: {peak_allocated / (1024 ** 3):.2f} GB")
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            ema.step_ema(ema_model, model)
-            peak_cached = torch.cuda.max_memory_cached(device=device)
-            # print(f"Peak Cached Memory: {peak_cached / (1024 ** 3):.2f} GB")
-            
-            # delete unnecessary variables to save memory
-            torch.cuda.empty_cache()
-            gc.collect()
+        
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        ema.step_ema(ema_model, model)
+        
 
-            train_loss += loss.detach().item() * img_24.size(0)
-            # psnr_train += psnr(predicted_noise, noise, torch.max(predicted_noise))
-            pbar.set_postfix(MSE=loss.item())
-            logger.add_scalar("MSE", loss.item(), global_step=epoch * len(pbar) + i)
+        train_loss += loss.detach().item() * img_24.size(0)
+        pbar.set_postfix(MSE=loss.item())
+        logger.add_scalar("MSE", loss.item(), global_step=epoch * len(pbar) + i)
     
-        # # Prefetch the next batch asynchronously (non-blocking)
-        # if train_data.prefetch_factor > 0  and i < len(train_data) - 1:
-        #     if i + 1 not in train_data.cpu_cache:
-        #         prefetch_batch(train_data, i)
-    
-        # # Clear the cache after using the previous batch
-        # if train_data.cpu_cache and i > 0:
-        #     train_data.cpu_cache.pop(i - 1, None)
-
     # Clean up memory before validation
     torch.cuda.empty_cache()
     gc.collect()
@@ -438,16 +403,6 @@ for epoch in range(args.epochs):
             label = label
             time = time
             
-            has_nan_24 = torch.isnan(img_24).any()
-            has_nan_peak = torch.isnan(img_peak).any()
-            
-            if (has_nan_24.item() or has_nan_peak.item()) is True:
-                # print('The batch number is: {}'.format(i))
-                del img_24
-                del img_peak
-                torch.cuda.empty_cache()
-                gc.collect()
-                continue
             
             labels = None
             t = diffusion.sample_timesteps(img_peak.shape[0]).to(device)
@@ -458,17 +413,9 @@ for epoch in range(args.epochs):
                 predicted_noise = model(x_t, img_24, labels, t)
                 loss = mse(noise, predicted_noise)
             
-            if np.isnan(loss.item()):
-                # print('The batch number is: {}'.format(i))
-                del img_24
-                del img_peak
-                del predicted_noise
-                torch.cuda.empty_cache()
-                gc.collect()
-                continue
-            else:
-                valid_loss += loss.detach().item() * img_24.size(0)
-                # psnr_val += psnr(predicted_noise, noise, torch.max(predicted_noise))
+            
+            valid_loss += loss.detach().item() * img_24.size(0)
+            # psnr_val += psnr(predicted_noise, noise, torch.max(predicted_noise))
 
         # Clean up memory after validation
         torch.cuda.empty_cache()
@@ -476,10 +423,10 @@ for epoch in range(args.epochs):
         
     # Logging and saving
     if epoch % 5 == 0:
-        ema_sampled_images = diffusion.sample(ema_model, y=img_24[0].reshape(1, 1, 512, 512), labels=None, n=1)
-        save_images(ema_sampled_images, os.path.join("results_512_DDPM_v2", args.run_name, f"{epoch}_ema_cond.png"))
-        true_img = img_24[0].reshape(1, 512, 512).permute(1, 2, 0).cpu().numpy()
-        gt_peak = img_peak[0].reshape(1, 512, 512).permute(1, 2, 0).cpu().numpy()
+        ema_sampled_images = diffusion.sample(ema_model, y=img_24[0].reshape(1, 1, 256, 256), labels=None, n=1)
+        save_images(ema_sampled_images, os.path.join("results_256_DDPM_v2", args.run_name, f"{epoch}_ema_cond.png"))
+        true_img = img_24[0].reshape(1, 256, 256).permute(1, 2, 0).cpu().numpy()
+        gt_peak = img_peak[0].reshape(1, 256, 256).permute(1, 2, 0).cpu().numpy()
         ema_samp = ema_sampled_images[0].permute(1, 2, 0).cpu().numpy()
         # Create a figure with two subplots
         
@@ -520,12 +467,12 @@ for epoch in range(args.epochs):
         min_valid_loss = valid_loss
     
     # Saving State Dict
-    torch.save(model.state_dict(), os.path.join("models_512_DDPM_v2", args.run_name, f"ckpt_test_cond.pt"))
+    torch.save(model.state_dict(), os.path.join("models_256_DDPM_v2", args.run_name, f"ckpt_test_cond.pt"))
     # torch.save(ema_model.state_dict(), os.path.join("models_512_DDPM_v2", args.run_name, f"ema_ckpt_cond.pt"))
     state = {
         'model_state': ema_model.state_dict(),
         'optimizer_state': optimizer.state_dict(),
     }
-    torch.save(state, os.path.join("models_512_DDPM_v2", args.run_name, "checkpoint.pt"))
+    torch.save(state, os.path.join("models_256_DDPM_v2", args.run_name, "checkpoint.pt"))
     wandb.save('ema_model_epoch{}.pt'.format(epoch))
     wandb.save('model_epoch{}.pt'.format(epoch))
