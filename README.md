@@ -21,4 +21,5 @@ List of libraries to run the project:
 Contact me at francesco.ramunno@fhnw.ch
 
 ### References
+Paper presented at the first ESA AI (SPAICE) Conference 17 19 September 2024: https://arxiv.org/abs/2407.11659
 
